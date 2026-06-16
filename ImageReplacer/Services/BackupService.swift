@@ -1,6 +1,6 @@
 import Foundation
 
-struct BackupService {
+struct BackupService: @unchecked Sendable {
     private let fileManager: FileManager
 
     init(fileManager: FileManager = .default) {
@@ -117,4 +117,3 @@ private extension JSONDecoder {
         return decoder
     }
 }
-

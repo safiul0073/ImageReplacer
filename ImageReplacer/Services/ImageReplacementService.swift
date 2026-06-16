@@ -12,7 +12,7 @@ struct ReplacementProgress: Equatable {
     }
 }
 
-struct ImageReplacementService {
+struct ImageReplacementService: @unchecked Sendable {
     private let fileManager: FileManager
     private let processor: ImageProcessingService
     private let backupService: BackupService
@@ -132,4 +132,3 @@ struct ImageReplacementService {
         }
     }
 }
-

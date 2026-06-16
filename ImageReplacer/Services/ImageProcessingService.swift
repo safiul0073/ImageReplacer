@@ -4,7 +4,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-struct ImageProcessingService {
+struct ImageProcessingService: Sendable {
     func process(sourceURL: URL, destinationURL: URL, targetSize: CGSize, resizeMode: ResizeMode, jpegQuality: Double, jpegBackground: NSColor = .white) throws -> Data {
         guard let source = CGImageSourceCreateWithURL(sourceURL as CFURL, nil),
               let image = CGImageSourceCreateImageAtIndex(source, 0, [kCGImageSourceShouldCache: true] as CFDictionary) else {
@@ -75,4 +75,3 @@ struct ImageProcessingService {
         }
     }
 }
-

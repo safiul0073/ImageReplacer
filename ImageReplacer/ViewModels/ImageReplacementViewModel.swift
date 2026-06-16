@@ -254,6 +254,9 @@ final class ImageReplacementViewModel: ObservableObject {
         isReplacing = true
         result = nil
         progress = ReplacementProgress(currentFile: "", currentIndex: 0, total: selectedMappingsCount)
+        let replacementService = replacementService
+        let mappings = mappings
+        let settings = settings
         replacementTask = Task {
             do {
                 let replacementResult = try await replacementService.replace(

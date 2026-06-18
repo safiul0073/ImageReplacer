@@ -9,6 +9,7 @@ final class ImageReplacementViewModel: ObservableObject {
     @Published var destinationFolder: URL?
     @Published var sourceImages: [ImageFile] = []
     @Published var destinationImages: [ImageFile] = []
+    @Published private(set) var selectedDestinationPaths: Set<String> = []
     @Published var mappings: [ReplacementMapping] = []
     @Published var settings = AppSettings() {
         didSet { saveSettings() }
@@ -27,6 +28,8 @@ final class ImageReplacementViewModel: ObservableObject {
     private let backupService = BackupService()
     private let bookmarkService = SecurityScopedBookmarkService()
     private var replacementTask: Task<Void, Never>?
+    private var knownDestinationPaths: Set<String> = []
+    private var selectionDestinationFolderPath: String?
     private let settingsKey = "appSettings"
     private let sourceBookmarkKey = "sourceFolderBookmark"
     private let destinationBookmarkKey = "destinationFolderBookmark"
@@ -36,7 +39,7 @@ final class ImageReplacementViewModel: ObservableObject {
     }
 
     var canPreview: Bool {
-        sourceFolder != nil && destinationFolder != nil && !sourceImages.isEmpty && !destinationImages.isEmpty
+        sourceFolder != nil && destinationFolder != nil && !sourceImages.isEmpty && availableSelectedDestinationCount > 0
     }
 
     var canReplace: Bool {
@@ -45,6 +48,32 @@ final class ImageReplacementViewModel: ObservableObject {
 
     var selectedMappingsCount: Int {
         mappings.filter(\.include).count
+    }
+
+    var orderedDestinationImages: [ImageFile] {
+        NaturalSortService.sort(destinationImages, mode: settings.destinationSortMode)
+    }
+
+    var selectedDestinationCount: Int {
+        destinationImages.filter { selectedDestinationPaths.contains(destinationPath(for: $0)) }.count
+    }
+
+    var availableSelectedDestinationCount: Int {
+        availableDestinationImages.filter { selectedDestinationPaths.contains(destinationPath(for: $0)) }.count
+    }
+
+    var unusedSelectedDestinationCount: Int {
+        max(0, availableSelectedDestinationCount - sourceImages.count)
+    }
+
+    var destinationSelectionMessage: String {
+        if destinationImages.isEmpty { return "Scan folders to choose destination images." }
+        if availableSelectedDestinationCount == 0 { return "Select at least one destination image at or after the starting position." }
+        return "\(availableSelectedDestinationCount) selected and available; \(min(sourceImages.count, availableSelectedDestinationCount)) will be mapped."
+    }
+
+    private var availableDestinationImages: [ImageFile] {
+        Array(orderedDestinationImages.dropFirst(max(0, settings.startingPosition - 1)))
     }
 
     func selectSourceFolder() {
@@ -56,7 +85,7 @@ final class ImageReplacementViewModel: ObservableObject {
 
     func selectDestinationFolder() {
         chooseFolder { [weak self] url in
-            self?.destinationFolder = url
+            self?.setDestinationFolder(url)
             self?.saveBookmark(url, key: self?.destinationBookmarkKey ?? "destinationFolderBookmark")
             self?.refreshBackups()
         }
@@ -80,7 +109,7 @@ final class ImageReplacementViewModel: ObservableObject {
                     self?.sourceFolder = url
                     self?.saveBookmark(url, key: self?.sourceBookmarkKey ?? "sourceFolderBookmark")
                 case .destination:
-                    self?.destinationFolder = url
+                    self?.setDestinationFolder(url)
                     self?.saveBookmark(url, key: self?.destinationBookmarkKey ?? "destinationFolderBookmark")
                     self?.refreshBackups()
                 }
@@ -121,7 +150,7 @@ final class ImageReplacementViewModel: ObservableObject {
                 let destination = try scanner.scanDestinationImages(in: destinationFolder, settings: settings)
                 await MainActor.run {
                     self.sourceImages = NaturalSortService.sort(source, mode: self.settings.sourceSortMode)
-                    self.destinationImages = NaturalSortService.sort(destination.images, mode: self.settings.destinationSortMode)
+                    self.applyScannedDestinationImages(destination.images, in: destinationFolder)
                     self.destinationSummary = destination.summary
                     self.isScanning = false
                     self.previewMapping()
@@ -145,7 +174,7 @@ final class ImageReplacementViewModel: ObservableObject {
             return
         }
         let sortedSources = NaturalSortService.sort(sourceImages, mode: settings.sourceSortMode)
-        let sortedDestinations = NaturalSortService.sort(destinationImages, mode: settings.destinationSortMode)
+        let sortedDestinations = orderedDestinationImages
         guard settings.startingPosition <= max(1, sortedDestinations.count) else {
             errorMessage = AppError.invalidStartingPosition.localizedDescription
             mappings = []
@@ -153,11 +182,76 @@ final class ImageReplacementViewModel: ObservableObject {
         }
         let startIndex = settings.startingPosition - 1
         let available = Array(sortedDestinations.dropFirst(startIndex))
+            .filter { selectedDestinationPaths.contains(destinationPath(for: $0)) }
         let count = min(sortedSources.count, available.count)
         mappings = (0..<count).map {
             ReplacementMapping(order: $0 + 1, source: sortedSources[$0], destination: available[$0])
         }
         destinationSummary.availableAfterStartingPosition = available.count
+    }
+
+    func applyScannedDestinationImages(_ images: [ImageFile], in folder: URL) {
+        destinationImages = NaturalSortService.sort(images, mode: settings.destinationSortMode)
+        updateDestinationSelection(afterScanning: destinationImages, in: folder)
+    }
+
+    func isDestinationSelected(_ image: ImageFile) -> Bool {
+        selectedDestinationPaths.contains(destinationPath(for: image))
+    }
+
+    func isDestinationAvailable(_ image: ImageFile) -> Bool {
+        guard let index = orderedDestinationImages.firstIndex(where: { destinationPath(for: $0) == destinationPath(for: image) }) else {
+            return false
+        }
+        return index >= max(0, settings.startingPosition - 1)
+    }
+
+    func destinationSelectionStatus(for image: ImageFile) -> String {
+        guard isDestinationAvailable(image) else { return "Before start" }
+        guard isDestinationSelected(image) else { return "Not selected" }
+        let selectedAvailable = availableDestinationImages.filter { isDestinationSelected($0) }
+        guard let selectedIndex = selectedAvailable.firstIndex(where: { destinationPath(for: $0) == destinationPath(for: image) }) else {
+            return "Selected"
+        }
+        return selectedIndex < sourceImages.count ? "Ready" : "Selected (unused)"
+    }
+
+    func setDestinationSelected(_ selected: Bool, for image: ImageFile) {
+        let path = destinationPath(for: image)
+        if selected {
+            selectedDestinationPaths.insert(path)
+        } else {
+            selectedDestinationPaths.remove(path)
+        }
+        previewMapping()
+    }
+
+    func selectAllDestinations() {
+        selectedDestinationPaths.formUnion(destinationImages.map { destinationPath(for: $0) })
+        previewMapping()
+    }
+
+    func clearDestinationSelection() {
+        selectedDestinationPaths.subtract(destinationImages.map { destinationPath(for: $0) })
+        previewMapping()
+    }
+
+    func invertDestinationSelection() {
+        for image in destinationImages {
+            let path = destinationPath(for: image)
+            if selectedDestinationPaths.contains(path) {
+                selectedDestinationPaths.remove(path)
+            } else {
+                selectedDestinationPaths.insert(path)
+            }
+        }
+        previewMapping()
+    }
+
+    func selectFirstDestinationsMatchingSourceCount() {
+        selectedDestinationPaths.subtract(destinationImages.map { destinationPath(for: $0) })
+        selectedDestinationPaths.formUnion(availableDestinationImages.prefix(sourceImages.count).map { destinationPath(for: $0) })
+        previewMapping()
     }
 
     func replaceImages() {
@@ -209,6 +303,7 @@ final class ImageReplacementViewModel: ObservableObject {
         destinationFolder = nil
         sourceImages = []
         destinationImages = []
+        resetDestinationSelection()
         mappings = []
         destinationSummary = DestinationScanSummary()
         result = nil
@@ -292,6 +387,40 @@ final class ImageReplacementViewModel: ObservableObject {
         }
     }
 
+    private func setDestinationFolder(_ url: URL) {
+        let newPath = url.standardizedFileURL.path
+        if destinationFolder?.standardizedFileURL.path != newPath {
+            resetDestinationSelection()
+        }
+        destinationFolder = url
+        selectionDestinationFolderPath = newPath
+    }
+
+    private func updateDestinationSelection(afterScanning images: [ImageFile], in folder: URL) {
+        let folderPath = folder.standardizedFileURL.path
+        if selectionDestinationFolderPath != folderPath {
+            resetDestinationSelection()
+            selectionDestinationFolderPath = folderPath
+        }
+
+        let currentPaths = Set(images.map { destinationPath(for: $0) })
+        if knownDestinationPaths.isEmpty {
+            selectedDestinationPaths.formUnion(currentPaths)
+        }
+        knownDestinationPaths.formUnion(currentPaths)
+    }
+
+    private func resetDestinationSelection() {
+        selectedDestinationPaths = []
+        knownDestinationPaths = []
+        selectionDestinationFolderPath = nil
+        mappings = []
+    }
+
+    private func destinationPath(for image: ImageFile) -> String {
+        image.url.standardizedFileURL.path
+    }
+
     private func saveBookmark(_ url: URL, key: String) {
         if let data = try? bookmarkService.bookmarkData(for: url) {
             UserDefaults.standard.set(data, forKey: key)
@@ -316,6 +445,7 @@ final class ImageReplacementViewModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: destinationBookmarkKey),
            let url = try? bookmarkService.resolve(data) {
             destinationFolder = url
+            selectionDestinationFolderPath = url.standardizedFileURL.path
             refreshBackups()
         }
     }

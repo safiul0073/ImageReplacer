@@ -60,7 +60,7 @@ struct SettingsView: View {
                 Text("Total destination images found: \(viewModel.destinationSummary.total)")
                 Text("Included: \(viewModel.destinationSummary.included)")
                 Text("Excluded: \(viewModel.destinationSummary.excluded)")
-                Text("Available after start: \(viewModel.destinationSummary.availableAfterStartingPosition)")
+                Text("Selected after start: \(viewModel.availableSelectedDestinationCount)")
             }
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -125,4 +125,3 @@ private struct ActionButtonsView: View {
         }
     }
 }
-

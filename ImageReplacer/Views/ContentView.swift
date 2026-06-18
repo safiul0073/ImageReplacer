@@ -12,6 +12,7 @@ struct ContentView: View {
                     HeaderView()
                     FolderSelectionView()
                     SettingsView()
+                    DestinationSelectionView()
                     MappingPreviewView()
                     if viewModel.isReplacing {
                         ReplacementProgressView()
@@ -103,6 +104,9 @@ private struct ConfirmationMessage: View {
         Destination:
         \(viewModel.destinationFolder?.path ?? "Not selected")
 
+        Selected destinations:
+        \(viewModel.availableSelectedDestinationCount)
+
         Starting destination:
         \(first)
 
@@ -116,4 +120,3 @@ private struct ConfirmationMessage: View {
         """)
     }
 }
-

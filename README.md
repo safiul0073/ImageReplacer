@@ -21,9 +21,9 @@ If you only want to use the app, you do not need Xcode.
 After the repository has a GitHub Release with `Image-Replacer-macOS.zip`, install the app with:
 
 ```bash
-curl -L https://raw.githubusercontent.com/YOUR-USERNAME/Image-Replacer/main/scripts/install.sh -o install-image-replacer.sh
+curl -L https://raw.githubusercontent.com/safiul0073/Image-Replacer/main/scripts/install.sh -o install-image-replacer.sh
 chmod +x install-image-replacer.sh
-./install-image-replacer.sh YOUR-USERNAME/Image-Replacer
+./install-image-replacer.sh safiul0073/Image-Replacer
 ```
 
 This downloads the latest release zip, unzips `Image Replacer.app`, and installs it into `/Applications`.
@@ -62,7 +62,7 @@ Building from source requires Xcode. If you do not have Xcode, use the release d
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/Image-Replacer.git
+git clone https://github.com/safiul0073/Image-Replacer.git
 cd Image-Replacer
 ```
 
@@ -199,6 +199,25 @@ Optional filters can narrow the destination list:
 - Maximum height
 
 When prefix and suffix are empty, all supported destination images are included.
+
+## Choosing Specific Destination Images
+
+After scanning, the **Choose Destination Images** table shows every matching image in the destination folder.
+
+1. Click **Clear All** if you do not want to use the default selection.
+2. Check only the destination files whose contents may be replaced.
+3. Review each file's sorted position and availability status.
+4. Check the Mapping Preview to confirm the exact source-to-destination pairs.
+5. Click **Replace Images**.
+
+Selection controls include:
+
+- **Select All**
+- **Clear All**
+- **Invert Selection**
+- **Select First Source Count**
+
+If 12 source images and 30 destination images are found, you can check any 12 destination files. Only those checked files are mapped and replaced. Checked files before the configured starting position remain unchanged.
 
 ## Sorting
 

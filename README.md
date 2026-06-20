@@ -21,9 +21,9 @@ If you only want to use the app, you do not need Xcode.
 After the repository has a GitHub Release with `Image-Replacer-macOS.zip`, install the app with:
 
 ```bash
-curl -L https://raw.githubusercontent.com/safiul0073/Image-Replacer/main/scripts/install.sh -o install-image-replacer.sh
+curl -L https://raw.githubusercontent.com/safiul0073/ImageReplacer/main/scripts/install.sh -o install-image-replacer.sh
 chmod +x install-image-replacer.sh
-./install-image-replacer.sh safiul0073/Image-Replacer
+./install-image-replacer.sh safiul0073/ImageReplacer
 ```
 
 This downloads the latest release zip, unzips `Image Replacer.app`, and installs it into `/Applications`.
@@ -204,11 +204,12 @@ When prefix and suffix are empty, all supported destination images are included.
 
 After scanning, the **Choose Destination Images** table shows every matching image in the destination folder.
 
-1. Click **Clear All** if you do not want to use the default selection.
-2. Check only the destination files whose contents may be replaced.
-3. Review each file's sorted position and availability status.
-4. Check the Mapping Preview to confirm the exact source-to-destination pairs.
-5. Click **Replace Images**.
+1. Enter part of a filename in **Filter destination filenames** to narrow the table.
+2. Use **Select All Results**, **Clear Results**, or **Invert Results** to change only matching files.
+3. Check or uncheck individual destination files as needed.
+4. Review each file's sorted position and availability status.
+5. Check the Mapping Preview to confirm the exact source-to-destination pairs.
+6. Click **Replace Images**.
 
 Selection controls include:
 
@@ -217,7 +218,20 @@ Selection controls include:
 - **Invert Selection**
 - **Select First Source Count**
 
+When the filename filter is active, bulk selection controls affect only the filtered results. Existing selections outside the filtered results remain unchanged.
+
 If 12 source images and 30 destination images are found, you can check any 12 destination files. Only those checked files are mapped and replaced. Checked files before the configured starting position remain unchanged.
+
+## Choosing Specific Source Images
+
+The **Choose Source Images** table provides the same filename filtering and selection controls for source files:
+
+1. Enter part of a filename in **Filter source filenames**.
+2. Use **Select All Results**, **Clear Results**, or **Invert Results**.
+3. Check or uncheck individual source files.
+4. Review the Mapping Preview before replacing images.
+
+Only selected source images are mapped. Source selections retain the configured source sort order, regardless of the order in which checkboxes were clicked.
 
 ## Sorting
 

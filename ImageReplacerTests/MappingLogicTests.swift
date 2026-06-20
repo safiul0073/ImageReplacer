@@ -3,11 +3,12 @@ import XCTest
 
 @MainActor
 final class MappingLogicTests: XCTestCase {
+    private let sourceFolder = URL(fileURLWithPath: "/tmp/source", isDirectory: true)
     private let destinationFolder = URL(fileURLWithPath: "/tmp/destination", isDirectory: true)
 
     func testArbitraryFilenameMapping() {
         let viewModel = ImageReplacementViewModel()
-        viewModel.sourceImages = makeFiles(["new1.jpg", "new2.jpg", "new3.jpg"])
+        viewModel.applyScannedSourceImages(makeFiles(["new1.jpg", "new2.jpg", "new3.jpg"]), in: sourceFolder)
         viewModel.settings.sourceSortMode = .alphabeticalAscending
         viewModel.settings.destinationSortMode = .alphabeticalAscending
         viewModel.applyScannedDestinationImages(makeFiles(["account.jpg", "best.jpg", "last.jpg"]), in: destinationFolder)
@@ -20,7 +21,7 @@ final class MappingLogicTests: XCTestCase {
 
     func testStartingPositionUsesListPosition() {
         let viewModel = ImageReplacementViewModel()
-        viewModel.sourceImages = makeFiles(["source.jpg"])
+        viewModel.applyScannedSourceImages(makeFiles(["source.jpg"]), in: sourceFolder)
         viewModel.settings.destinationSortMode = .natural
         viewModel.settings.startingPosition = 3
         viewModel.applyScannedDestinationImages(makeFiles(["account.jpg", "best.jpg", "image2.jpg", "image10.jpg", "last.jpg"]), in: destinationFolder)
@@ -31,21 +32,22 @@ final class MappingLogicTests: XCTestCase {
     }
 
     func testReplacementCountUsesMinimum() {
-        let viewModel = ImageReplacementViewModel()
-        viewModel.sourceImages = makeFiles((1...12).map { "source\($0).jpg" })
-        viewModel.applyScannedDestinationImages(makeFiles((1...50).map { "destination\($0).jpg" }), in: destinationFolder)
-        viewModel.previewMapping()
-        XCTAssertEqual(viewModel.mappings.count, 12)
+        let fewerSources = ImageReplacementViewModel()
+        fewerSources.applyScannedSourceImages(makeFiles((1...12).map { "source\($0).jpg" }), in: sourceFolder)
+        fewerSources.applyScannedDestinationImages(makeFiles((1...50).map { "destination\($0).jpg" }), in: destinationFolder)
+        fewerSources.previewMapping()
+        XCTAssertEqual(fewerSources.mappings.count, 12)
 
-        viewModel.sourceImages = makeFiles((1...50).map { "source\($0).jpg" })
-        viewModel.applyScannedDestinationImages(makeFiles((1...12).map { "destination\($0).jpg" }), in: destinationFolder)
-        viewModel.previewMapping()
-        XCTAssertEqual(viewModel.mappings.count, 12)
+        let fewerDestinations = ImageReplacementViewModel()
+        fewerDestinations.applyScannedSourceImages(makeFiles((1...50).map { "source\($0).jpg" }), in: sourceFolder)
+        fewerDestinations.applyScannedDestinationImages(makeFiles((1...12).map { "destination\($0).jpg" }), in: destinationFolder)
+        fewerDestinations.previewMapping()
+        XCTAssertEqual(fewerDestinations.mappings.count, 12)
     }
 
     func testOnlySpecificDestinationsAreMapped() {
         let viewModel = ImageReplacementViewModel()
-        viewModel.sourceImages = makeFiles((1...12).map { "source\($0).jpg" })
+        viewModel.applyScannedSourceImages(makeFiles((1...12).map { "source\($0).jpg" }), in: sourceFolder)
         let destinations = makeFiles((1...30).map { "destination\($0).jpg" })
         viewModel.applyScannedDestinationImages(destinations, in: destinationFolder)
         viewModel.clearDestinationSelection()
@@ -65,7 +67,7 @@ final class MappingLogicTests: XCTestCase {
 
     func testSelectedDestinationsUseSortedOrderNotClickOrder() {
         let viewModel = ImageReplacementViewModel()
-        viewModel.sourceImages = makeFiles(["source1.jpg", "source2.jpg"])
+        viewModel.applyScannedSourceImages(makeFiles(["source1.jpg", "source2.jpg"]), in: sourceFolder)
         let destinations = makeFiles(["image10.jpg", "image2.jpg", "image1.jpg"])
         viewModel.settings.destinationSortMode = .natural
         viewModel.applyScannedDestinationImages(destinations, in: destinationFolder)
@@ -93,7 +95,7 @@ final class MappingLogicTests: XCTestCase {
 
     func testStartingPositionExcludesEarlierCheckedDestinations() {
         let viewModel = ImageReplacementViewModel()
-        viewModel.sourceImages = makeFiles(["source1.jpg", "source2.jpg"])
+        viewModel.applyScannedSourceImages(makeFiles(["source1.jpg", "source2.jpg"]), in: sourceFolder)
         viewModel.settings.startingPosition = 3
         viewModel.applyScannedDestinationImages(makeFiles(["a.jpg", "b.jpg", "c.jpg", "d.jpg"]), in: destinationFolder)
         viewModel.previewMapping()
@@ -104,7 +106,7 @@ final class MappingLogicTests: XCTestCase {
 
     func testSelectionControlsAndZeroSelectionDisableReplacement() {
         let viewModel = ImageReplacementViewModel()
-        viewModel.sourceImages = makeFiles(["source1.jpg", "source2.jpg"])
+        viewModel.applyScannedSourceImages(makeFiles(["source1.jpg", "source2.jpg"]), in: sourceFolder)
         viewModel.applyScannedDestinationImages(makeFiles(["a.jpg", "b.jpg", "c.jpg"]), in: destinationFolder)
 
         viewModel.clearDestinationSelection()
@@ -137,6 +139,62 @@ final class MappingLogicTests: XCTestCase {
 
         XCTAssertEqual(viewModel.selectedDestinationCount, 1)
         XCTAssertTrue(viewModel.isDestinationSelected(secondImages[0]))
+    }
+
+    func testBulkSelectionCanBeScopedToFilteredDestinations() {
+        let viewModel = ImageReplacementViewModel()
+        viewModel.applyScannedSourceImages(makeFiles(["source1.jpg", "source2.jpg"]), in: sourceFolder)
+        let destinations = makeFiles(["avatar-1.jpg", "profile.jpg", "avatar-2.png", "account.jpg"])
+        viewModel.applyScannedDestinationImages(destinations, in: destinationFolder)
+        viewModel.clearDestinationSelection()
+
+        let filtered = destinations.filter { $0.filename.localizedCaseInsensitiveContains("avatar") }
+        viewModel.selectAllDestinations(in: filtered)
+
+        XCTAssertEqual(viewModel.mappings.map(\.destination.filename), ["avatar-1.jpg", "avatar-2.png"])
+        XCTAssertFalse(viewModel.isDestinationSelected(destinations.first { $0.filename == "profile.jpg" }!))
+        XCTAssertFalse(viewModel.isDestinationSelected(destinations.first { $0.filename == "account.jpg" }!))
+    }
+
+    func testBulkSelectionCanBeScopedToFilteredSources() {
+        let viewModel = ImageReplacementViewModel()
+        let sources = makeFiles(["avatar-1.jpg", "profile.jpg", "avatar-2.png", "account.jpg"])
+        viewModel.applyScannedSourceImages(sources, in: sourceFolder)
+        viewModel.applyScannedDestinationImages(makeFiles(["one.jpg", "two.jpg", "three.jpg"]), in: destinationFolder)
+        viewModel.clearSourceSelection()
+
+        let filtered = sources.filter { $0.filename.localizedCaseInsensitiveContains("avatar") }
+        viewModel.selectAllSources(in: filtered)
+
+        XCTAssertEqual(viewModel.mappings.map(\.source.filename), ["avatar-1.jpg", "avatar-2.png"])
+        XCTAssertFalse(viewModel.isSourceSelected(sources.first { $0.filename == "profile.jpg" }!))
+        XCTAssertFalse(viewModel.isSourceSelected(sources.first { $0.filename == "account.jpg" }!))
+    }
+
+    func testSourceSelectionRescanPreservesKnownFilesAndLeavesNewFilesUnchecked() {
+        let viewModel = ImageReplacementViewModel()
+        let initial = makeFiles(["first.jpg", "second.jpg"])
+        viewModel.applyScannedSourceImages(initial, in: sourceFolder)
+        viewModel.setSourceSelected(false, for: initial[1])
+
+        let rescanned = makeFiles(["first.jpg", "second.jpg", "new.jpg"])
+        viewModel.applyScannedSourceImages(rescanned, in: sourceFolder)
+
+        XCTAssertTrue(viewModel.isSourceSelected(rescanned[0]))
+        XCTAssertFalse(viewModel.isSourceSelected(rescanned[1]))
+        XCTAssertFalse(viewModel.isSourceSelected(rescanned[2]))
+    }
+
+    func testNoSelectedSourcesProducesNoMappings() {
+        let viewModel = ImageReplacementViewModel()
+        viewModel.applyScannedSourceImages(makeFiles(["source.jpg"]), in: sourceFolder)
+        viewModel.applyScannedDestinationImages(makeFiles(["destination.jpg"]), in: destinationFolder)
+
+        viewModel.clearSourceSelection()
+
+        XCTAssertEqual(viewModel.selectedSourceCount, 0)
+        XCTAssertTrue(viewModel.mappings.isEmpty)
+        XCTAssertFalse(viewModel.canReplace)
     }
 
     private func makeFiles(_ names: [String]) -> [ImageFile] {

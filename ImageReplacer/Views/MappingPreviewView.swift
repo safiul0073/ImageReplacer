@@ -60,9 +60,10 @@ struct MappingPreviewView: View {
 
             HStack {
                 Text("Total source images: \(viewModel.sourceImages.count)")
+                Text("Selected sources: \(viewModel.selectedSourceCount)")
                 Text("Total destination matches: \(viewModel.destinationImages.count)")
                 Text("Selected destinations: \(viewModel.availableSelectedDestinationCount)")
-                Text("Unused source images: \(max(0, viewModel.sourceImages.count - viewModel.mappings.count))")
+                Text("Unused selected sources: \(max(0, viewModel.selectedSourceCount - viewModel.mappings.count))")
                 Text("Unused selected destinations: \(viewModel.unusedSelectedDestinationCount)")
             }
             .font(.caption)

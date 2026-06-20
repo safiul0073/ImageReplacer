@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-struct DestinationSelectionView: View {
+struct SourceSelectionView: View {
     @EnvironmentObject private var viewModel: ImageReplacementViewModel
     @State private var filterText = ""
 
@@ -9,23 +9,23 @@ struct DestinationSelectionView: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Choose Destination Images")
+                    Text("Choose Source Images")
                         .font(.title3.bold())
-                    Text(viewModel.destinationSelectionMessage)
+                    Text(viewModel.sourceSelectionMessage)
                         .font(.caption)
-                        .foregroundStyle(viewModel.availableSelectedDestinationCount == 0 ? .orange : .secondary)
+                        .foregroundStyle(viewModel.selectedSourceCount == 0 ? .orange : .secondary)
                 }
                 Spacer()
-                Text("\(viewModel.selectedDestinationCount) checked")
+                Text("\(viewModel.selectedSourceCount) checked")
                     .foregroundStyle(.secondary)
             }
 
             HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
                     .foregroundStyle(.secondary)
-                TextField("Filter destination filenames", text: $filterText)
+                TextField("Filter source filenames", text: $filterText)
                     .textFieldStyle(.roundedBorder)
-                    .accessibilityLabel("Filter destination filenames")
+                    .accessibilityLabel("Filter source filenames")
                 if !filterText.isEmpty {
                     Button {
                         filterText = ""
@@ -35,7 +35,7 @@ struct DestinationSelectionView: View {
                     .buttonStyle(.borderless)
                     .help("Clear filename filter")
                 }
-                Text("Showing \(filteredImages.count) of \(viewModel.destinationImages.count)")
+                Text("Showing \(filteredImages.count) of \(viewModel.sourceImages.count)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .frame(minWidth: 105, alignment: .trailing)
@@ -43,20 +43,16 @@ struct DestinationSelectionView: View {
 
             HStack {
                 Button(filterText.isEmpty ? "Select All" : "Select All Results") {
-                    viewModel.selectAllDestinations(in: filteredImages)
+                    viewModel.selectAllSources(in: filteredImages)
                 }
                 Button(filterText.isEmpty ? "Clear All" : "Clear Results") {
-                    viewModel.clearDestinationSelection(in: filteredImages)
+                    viewModel.clearSourceSelection(in: filteredImages)
                 }
                 Button(filterText.isEmpty ? "Invert Selection" : "Invert Results") {
-                    viewModel.invertDestinationSelection(in: filteredImages)
+                    viewModel.invertSourceSelection(in: filteredImages)
                 }
-                Button("Select First \(viewModel.selectedSourceCount) Results") {
-                    viewModel.selectFirstDestinationsMatchingSourceCount(in: filteredImages)
-                }
-                .disabled(viewModel.selectedSourceCount == 0 || filteredImages.isEmpty)
                 Spacer()
-                Text("Starting position: \(viewModel.settings.startingPosition)")
+                Text("Mapping uses selected sources in the current source sort order.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -68,17 +64,17 @@ struct DestinationSelectionView: View {
                 }
                 .width(65)
 
-                TableColumn("Replace") { row in
-                    Toggle("Replace \(row.image.filename)", isOn: Binding(
-                        get: { viewModel.isDestinationSelected(row.image) },
-                        set: { viewModel.setDestinationSelected($0, for: row.image) }
+                TableColumn("Use") { row in
+                    Toggle("Use \(row.image.filename)", isOn: Binding(
+                        get: { viewModel.isSourceSelected(row.image) },
+                        set: { viewModel.setSourceSelected($0, for: row.image) }
                     ))
                     .labelsHidden()
                 }
-                .width(65)
+                .width(55)
 
-                TableColumn("Destination Image") { row in
-                    DestinationImageCell(file: row.image)
+                TableColumn("Source Image") { row in
+                    SourceImageCell(file: row.image)
                 }
 
                 TableColumn("Extension") { row in
@@ -91,21 +87,21 @@ struct DestinationSelectionView: View {
                 }
                 .width(100)
 
-                TableColumn("Availability") { row in
-                    Text(viewModel.destinationSelectionStatus(for: row.image))
-                        .foregroundStyle(statusColor(for: row.image))
+                TableColumn("Status") { row in
+                    Text(viewModel.isSourceSelected(row.image) ? "Selected" : "Not selected")
+                        .foregroundStyle(viewModel.isSourceSelected(row.image) ? .green : .secondary)
                 }
-                .width(125)
+                .width(100)
             }
-            .frame(minHeight: 240, maxHeight: 360)
+            .frame(minHeight: 220, maxHeight: 340)
             .overlay {
                 if rows.isEmpty {
                     VStack(spacing: 8) {
-                        Image(systemName: viewModel.destinationImages.isEmpty ? "photo.badge.plus" : "magnifyingglass")
+                        Image(systemName: viewModel.sourceImages.isEmpty ? "photo.badge.plus" : "magnifyingglass")
                             .font(.title)
-                        Text(viewModel.destinationImages.isEmpty ? "No Destination Images" : "No Matching Destinations")
+                        Text(viewModel.sourceImages.isEmpty ? "No Source Images" : "No Matching Sources")
                             .font(.headline)
-                        Text(viewModel.destinationImages.isEmpty ? "Select folders and scan to choose files for replacement." : "Try a different filename filter.")
+                        Text(viewModel.sourceImages.isEmpty ? "Select folders and scan to choose source files." : "Try a different filename filter.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -115,42 +111,30 @@ struct DestinationSelectionView: View {
         }
         .padding(16)
         .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
-        .onChange(of: viewModel.settings.startingPosition) { _ in
-            viewModel.previewMapping()
-        }
     }
 
-    private var rows: [DestinationSelectionRow] {
-        viewModel.orderedDestinationImages.enumerated().compactMap { item in
+    private var rows: [SourceSelectionRow] {
+        viewModel.orderedSourceImages.enumerated().compactMap { item in
             guard filterText.nilIfBlank == nil || item.element.filename.localizedCaseInsensitiveContains(filterText.trimmingCharacters(in: .whitespacesAndNewlines)) else {
                 return nil
             }
-            return DestinationSelectionRow(position: item.offset + 1, image: item.element)
+            return SourceSelectionRow(position: item.offset + 1, image: item.element)
         }
     }
 
     private var filteredImages: [ImageFile] {
         rows.map(\.image)
     }
-
-    private func statusColor(for image: ImageFile) -> Color {
-        let status = viewModel.destinationSelectionStatus(for: image)
-        switch status {
-        case "Ready": return .green
-        case "Before start", "Selected (unused)": return .orange
-        default: return .secondary
-        }
-    }
 }
 
-private struct DestinationSelectionRow: Identifiable {
+private struct SourceSelectionRow: Identifiable {
     let position: Int
     let image: ImageFile
 
     var id: UUID { image.id }
 }
 
-private struct DestinationImageCell: View {
+private struct SourceImageCell: View {
     let file: ImageFile
     @State private var image: NSImage?
 
@@ -182,3 +166,4 @@ private struct DestinationImageCell: View {
         }
     }
 }
+

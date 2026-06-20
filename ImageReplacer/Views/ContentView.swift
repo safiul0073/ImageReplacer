@@ -12,6 +12,7 @@ struct ContentView: View {
                     HeaderView()
                     FolderSelectionView()
                     SettingsView()
+                    SourceSelectionView()
                     DestinationSelectionView()
                     MappingPreviewView()
                     if viewModel.isReplacing {
@@ -100,6 +101,9 @@ private struct ConfirmationMessage: View {
         Text("""
         Source:
         \(viewModel.sourceFolder?.path ?? "Not selected")
+
+        Selected sources:
+        \(viewModel.selectedSourceCount)
 
         Destination:
         \(viewModel.destinationFolder?.path ?? "Not selected")

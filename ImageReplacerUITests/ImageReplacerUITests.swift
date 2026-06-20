@@ -11,6 +11,7 @@ final class ImageReplacerUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["Image Replacer"].waitForExistence(timeout: 5))
         XCTAssertTrue(app.buttons["Scan Folders"].exists)
         XCTAssertTrue(app.buttons["Replace Images"].exists)
+        XCTAssertTrue(app.staticTexts["Choose Source Images"].exists)
         XCTAssertTrue(app.staticTexts["Choose Destination Images"].exists)
     }
 

@@ -9,6 +9,7 @@ final class ImageReplacementViewModel: ObservableObject {
     @Published var destinationFolder: URL?
     @Published var sourceImages: [ImageFile] = []
     @Published var destinationImages: [ImageFile] = []
+    @Published private(set) var selectedSourcePaths: Set<String> = []
     @Published private(set) var selectedDestinationPaths: Set<String> = []
     @Published var mappings: [ReplacementMapping] = []
     @Published var settings = AppSettings() {
@@ -28,6 +29,8 @@ final class ImageReplacementViewModel: ObservableObject {
     private let backupService = BackupService()
     private let bookmarkService = SecurityScopedBookmarkService()
     private var replacementTask: Task<Void, Never>?
+    private var knownSourcePaths: Set<String> = []
+    private var selectionSourceFolderPath: String?
     private var knownDestinationPaths: Set<String> = []
     private var selectionDestinationFolderPath: String?
     private let settingsKey = "appSettings"
@@ -39,7 +42,7 @@ final class ImageReplacementViewModel: ObservableObject {
     }
 
     var canPreview: Bool {
-        sourceFolder != nil && destinationFolder != nil && !sourceImages.isEmpty && availableSelectedDestinationCount > 0
+        sourceFolder != nil && destinationFolder != nil && selectedSourceCount > 0 && availableSelectedDestinationCount > 0
     }
 
     var canReplace: Bool {
@@ -48,6 +51,20 @@ final class ImageReplacementViewModel: ObservableObject {
 
     var selectedMappingsCount: Int {
         mappings.filter(\.include).count
+    }
+
+    var orderedSourceImages: [ImageFile] {
+        NaturalSortService.sort(sourceImages, mode: settings.sourceSortMode)
+    }
+
+    var selectedSourceCount: Int {
+        sourceImages.filter { selectedSourcePaths.contains(imagePath(for: $0)) }.count
+    }
+
+    var sourceSelectionMessage: String {
+        if sourceImages.isEmpty { return "Scan folders to choose source images." }
+        if selectedSourceCount == 0 { return "Select at least one source image to replace a destination." }
+        return "\(selectedSourceCount) source images selected."
     }
 
     var orderedDestinationImages: [ImageFile] {
@@ -63,13 +80,13 @@ final class ImageReplacementViewModel: ObservableObject {
     }
 
     var unusedSelectedDestinationCount: Int {
-        max(0, availableSelectedDestinationCount - sourceImages.count)
+        max(0, availableSelectedDestinationCount - selectedSourceCount)
     }
 
     var destinationSelectionMessage: String {
         if destinationImages.isEmpty { return "Scan folders to choose destination images." }
         if availableSelectedDestinationCount == 0 { return "Select at least one destination image at or after the starting position." }
-        return "\(availableSelectedDestinationCount) selected and available; \(min(sourceImages.count, availableSelectedDestinationCount)) will be mapped."
+        return "\(availableSelectedDestinationCount) selected and available; \(min(selectedSourceCount, availableSelectedDestinationCount)) will be mapped."
     }
 
     private var availableDestinationImages: [ImageFile] {
@@ -78,7 +95,7 @@ final class ImageReplacementViewModel: ObservableObject {
 
     func selectSourceFolder() {
         chooseFolder { [weak self] url in
-            self?.sourceFolder = url
+            self?.setSourceFolder(url)
             self?.saveBookmark(url, key: self?.sourceBookmarkKey ?? "sourceFolderBookmark")
         }
     }
@@ -106,7 +123,7 @@ final class ImageReplacementViewModel: ObservableObject {
             Task { @MainActor in
                 switch destination {
                 case .source:
-                    self?.sourceFolder = url
+                    self?.setSourceFolder(url)
                     self?.saveBookmark(url, key: self?.sourceBookmarkKey ?? "sourceFolderBookmark")
                 case .destination:
                     self?.setDestinationFolder(url)
@@ -149,7 +166,7 @@ final class ImageReplacementViewModel: ObservableObject {
                 let source = try scanner.scanSourceImages(in: sourceFolder)
                 let destination = try scanner.scanDestinationImages(in: destinationFolder, settings: settings)
                 await MainActor.run {
-                    self.sourceImages = NaturalSortService.sort(source, mode: self.settings.sourceSortMode)
+                    self.applyScannedSourceImages(source, in: sourceFolder)
                     self.applyScannedDestinationImages(destination.images, in: destinationFolder)
                     self.destinationSummary = destination.summary
                     self.isScanning = false
@@ -173,7 +190,7 @@ final class ImageReplacementViewModel: ObservableObject {
             errorMessage = AppError.invalidStartingPosition.localizedDescription
             return
         }
-        let sortedSources = NaturalSortService.sort(sourceImages, mode: settings.sourceSortMode)
+        let sortedSources = orderedSourceImages.filter { selectedSourcePaths.contains(imagePath(for: $0)) }
         let sortedDestinations = orderedDestinationImages
         guard settings.startingPosition <= max(1, sortedDestinations.count) else {
             errorMessage = AppError.invalidStartingPosition.localizedDescription
@@ -195,6 +212,47 @@ final class ImageReplacementViewModel: ObservableObject {
         updateDestinationSelection(afterScanning: destinationImages, in: folder)
     }
 
+    func applyScannedSourceImages(_ images: [ImageFile], in folder: URL) {
+        sourceImages = NaturalSortService.sort(images, mode: settings.sourceSortMode)
+        updateSourceSelection(afterScanning: sourceImages, in: folder)
+    }
+
+    func isSourceSelected(_ image: ImageFile) -> Bool {
+        selectedSourcePaths.contains(imagePath(for: image))
+    }
+
+    func setSourceSelected(_ selected: Bool, for image: ImageFile) {
+        let path = imagePath(for: image)
+        if selected {
+            selectedSourcePaths.insert(path)
+        } else {
+            selectedSourcePaths.remove(path)
+        }
+        previewMapping()
+    }
+
+    func selectAllSources(in images: [ImageFile]? = nil) {
+        selectedSourcePaths.formUnion((images ?? sourceImages).map { imagePath(for: $0) })
+        previewMapping()
+    }
+
+    func clearSourceSelection(in images: [ImageFile]? = nil) {
+        selectedSourcePaths.subtract((images ?? sourceImages).map { imagePath(for: $0) })
+        previewMapping()
+    }
+
+    func invertSourceSelection(in images: [ImageFile]? = nil) {
+        for image in images ?? sourceImages {
+            let path = imagePath(for: image)
+            if selectedSourcePaths.contains(path) {
+                selectedSourcePaths.remove(path)
+            } else {
+                selectedSourcePaths.insert(path)
+            }
+        }
+        previewMapping()
+    }
+
     func isDestinationSelected(_ image: ImageFile) -> Bool {
         selectedDestinationPaths.contains(destinationPath(for: image))
     }
@@ -213,7 +271,7 @@ final class ImageReplacementViewModel: ObservableObject {
         guard let selectedIndex = selectedAvailable.firstIndex(where: { destinationPath(for: $0) == destinationPath(for: image) }) else {
             return "Selected"
         }
-        return selectedIndex < sourceImages.count ? "Ready" : "Selected (unused)"
+        return selectedIndex < selectedSourceCount ? "Ready" : "Selected (unused)"
     }
 
     func setDestinationSelected(_ selected: Bool, for image: ImageFile) {
@@ -226,18 +284,20 @@ final class ImageReplacementViewModel: ObservableObject {
         previewMapping()
     }
 
-    func selectAllDestinations() {
-        selectedDestinationPaths.formUnion(destinationImages.map { destinationPath(for: $0) })
+    func selectAllDestinations(in images: [ImageFile]? = nil) {
+        let targets = images ?? destinationImages
+        selectedDestinationPaths.formUnion(targets.map { destinationPath(for: $0) })
         previewMapping()
     }
 
-    func clearDestinationSelection() {
-        selectedDestinationPaths.subtract(destinationImages.map { destinationPath(for: $0) })
+    func clearDestinationSelection(in images: [ImageFile]? = nil) {
+        let targets = images ?? destinationImages
+        selectedDestinationPaths.subtract(targets.map { destinationPath(for: $0) })
         previewMapping()
     }
 
-    func invertDestinationSelection() {
-        for image in destinationImages {
+    func invertDestinationSelection(in images: [ImageFile]? = nil) {
+        for image in images ?? destinationImages {
             let path = destinationPath(for: image)
             if selectedDestinationPaths.contains(path) {
                 selectedDestinationPaths.remove(path)
@@ -248,9 +308,12 @@ final class ImageReplacementViewModel: ObservableObject {
         previewMapping()
     }
 
-    func selectFirstDestinationsMatchingSourceCount() {
-        selectedDestinationPaths.subtract(destinationImages.map { destinationPath(for: $0) })
-        selectedDestinationPaths.formUnion(availableDestinationImages.prefix(sourceImages.count).map { destinationPath(for: $0) })
+    func selectFirstDestinationsMatchingSourceCount(in images: [ImageFile]? = nil) {
+        let targets = images ?? destinationImages
+        let targetPaths = Set(targets.map { destinationPath(for: $0) })
+        selectedDestinationPaths.subtract(targetPaths)
+        let availableTargets = availableDestinationImages.filter { targetPaths.contains(destinationPath(for: $0)) }
+        selectedDestinationPaths.formUnion(availableTargets.prefix(selectedSourceCount).map { destinationPath(for: $0) })
         previewMapping()
     }
 
@@ -303,6 +366,7 @@ final class ImageReplacementViewModel: ObservableObject {
         destinationFolder = nil
         sourceImages = []
         destinationImages = []
+        resetSourceSelection()
         resetDestinationSelection()
         mappings = []
         destinationSummary = DestinationScanSummary()
@@ -387,6 +451,36 @@ final class ImageReplacementViewModel: ObservableObject {
         }
     }
 
+    private func setSourceFolder(_ url: URL) {
+        let newPath = url.standardizedFileURL.path
+        if sourceFolder?.standardizedFileURL.path != newPath {
+            resetSourceSelection()
+        }
+        sourceFolder = url
+        selectionSourceFolderPath = newPath
+    }
+
+    private func updateSourceSelection(afterScanning images: [ImageFile], in folder: URL) {
+        let folderPath = folder.standardizedFileURL.path
+        if selectionSourceFolderPath != folderPath {
+            resetSourceSelection()
+            selectionSourceFolderPath = folderPath
+        }
+
+        let currentPaths = Set(images.map { imagePath(for: $0) })
+        if knownSourcePaths.isEmpty {
+            selectedSourcePaths.formUnion(currentPaths)
+        }
+        knownSourcePaths.formUnion(currentPaths)
+    }
+
+    private func resetSourceSelection() {
+        selectedSourcePaths = []
+        knownSourcePaths = []
+        selectionSourceFolderPath = nil
+        mappings = []
+    }
+
     private func setDestinationFolder(_ url: URL) {
         let newPath = url.standardizedFileURL.path
         if destinationFolder?.standardizedFileURL.path != newPath {
@@ -418,6 +512,10 @@ final class ImageReplacementViewModel: ObservableObject {
     }
 
     private func destinationPath(for image: ImageFile) -> String {
+        imagePath(for: image)
+    }
+
+    private func imagePath(for image: ImageFile) -> String {
         image.url.standardizedFileURL.path
     }
 
@@ -441,6 +539,7 @@ final class ImageReplacementViewModel: ObservableObject {
         if let data = UserDefaults.standard.data(forKey: sourceBookmarkKey),
            let url = try? bookmarkService.resolve(data) {
             sourceFolder = url
+            selectionSourceFolderPath = url.standardizedFileURL.path
         }
         if let data = UserDefaults.standard.data(forKey: destinationBookmarkKey),
            let url = try? bookmarkService.resolve(data) {

@@ -77,6 +77,22 @@ struct SourceSelectionView: View {
                     SourceImageCell(file: row.image)
                 }
 
+                TableColumn("Destination") { row in
+                    Picker("Destination for \(row.image.filename)", selection: Binding(
+                        get: { viewModel.assignedDestinationPath(for: row.image) },
+                        set: { viewModel.setAssignedDestinationPath($0, for: row.image) }
+                    )) {
+                        Text("Automatic").tag("")
+                        ForEach(viewModel.availableDestinationChoices) { destination in
+                            Text(destination.filename).tag(destination.url.standardizedFileURL.path)
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 240)
+                    .help("Choose the exact destination this source image should replace")
+                }
+                .width(min: 180, ideal: 230, max: 280)
+
                 TableColumn("Extension") { row in
                     Text(row.image.fileExtension.uppercased())
                 }
@@ -88,10 +104,18 @@ struct SourceSelectionView: View {
                 .width(100)
 
                 TableColumn("Status") { row in
-                    Text(viewModel.isSourceSelected(row.image) ? "Selected" : "Not selected")
-                        .foregroundStyle(viewModel.isSourceSelected(row.image) ? .green : .secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(viewModel.isSourceSelected(row.image) ? "Selected" : "Not selected")
+                            .foregroundStyle(viewModel.isSourceSelected(row.image) ? .green : .secondary)
+                        if viewModel.assignedDestinationPath(for: row.image).isEmpty == false {
+                            Text("Paired: \(viewModel.assignedDestinationFilename(for: row.image))")
+                                .font(.caption2)
+                                .foregroundStyle(.blue)
+                                .lineLimit(1)
+                        }
+                    }
                 }
-                .width(100)
+                .width(150)
             }
             .frame(minHeight: 220, maxHeight: 340)
             .overlay {
@@ -166,4 +190,3 @@ private struct SourceImageCell: View {
         }
     }
 }
-

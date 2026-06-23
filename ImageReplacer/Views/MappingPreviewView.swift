@@ -63,6 +63,7 @@ struct MappingPreviewView: View {
                 Text("Selected sources: \(viewModel.selectedSourceCount)")
                 Text("Total destination matches: \(viewModel.destinationImages.count)")
                 Text("Selected destinations: \(viewModel.availableSelectedDestinationCount)")
+                Text("Manual pairs: \(viewModel.explicitPairCount)")
                 Text("Unused selected sources: \(max(0, viewModel.selectedSourceCount - viewModel.mappings.count))")
                 Text("Unused selected destinations: \(viewModel.unusedSelectedDestinationCount)")
             }

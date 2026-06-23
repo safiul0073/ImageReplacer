@@ -197,7 +197,58 @@ final class MappingLogicTests: XCTestCase {
         XCTAssertFalse(viewModel.canReplace)
     }
 
+    func testExplicitSourceDestinationPairsOverrideAutomaticOrder() {
+        let viewModel = ImageReplacementViewModel()
+        let sources = makeFiles(["new1.jpg", "new2.jpg", "new3.jpg"])
+        let destinations = makeFiles(["account.jpg", "best.jpg", "last.jpg"])
+        viewModel.applyScannedSourceImages(sources, in: sourceFolder)
+        viewModel.applyScannedDestinationImages(destinations, in: destinationFolder)
+
+        viewModel.setAssignedDestinationPath(path(for: destinations[2]), for: sources[0])
+        viewModel.setAssignedDestinationPath(path(for: destinations[1]), for: sources[1])
+
+        XCTAssertEqual(viewModel.mappings.map(\.source.filename), ["new1.jpg", "new2.jpg", "new3.jpg"])
+        XCTAssertEqual(viewModel.mappings.map(\.destination.filename), ["last.jpg", "best.jpg", "account.jpg"])
+        XCTAssertEqual(viewModel.explicitPairCount, 2)
+    }
+
+    func testAssigningSameDestinationMovesPairToLatestSource() {
+        let viewModel = ImageReplacementViewModel()
+        let sources = makeFiles(["new1.jpg", "new2.jpg"])
+        let destinations = makeFiles(["account.jpg", "best.jpg"])
+        viewModel.applyScannedSourceImages(sources, in: sourceFolder)
+        viewModel.applyScannedDestinationImages(destinations, in: destinationFolder)
+
+        viewModel.setAssignedDestinationPath(path(for: destinations[1]), for: sources[0])
+        viewModel.setAssignedDestinationPath(path(for: destinations[1]), for: sources[1])
+
+        XCTAssertEqual(viewModel.assignedDestinationPath(for: sources[0]), "")
+        XCTAssertEqual(viewModel.assignedDestinationPath(for: sources[1]), path(for: destinations[1]))
+        XCTAssertEqual(viewModel.mappings.map(\.destination.filename), ["account.jpg", "best.jpg"])
+    }
+
+    func testExplicitPairSelectsSourceAndDestination() {
+        let viewModel = ImageReplacementViewModel()
+        let sources = makeFiles(["new1.jpg"])
+        let destinations = makeFiles(["account.jpg"])
+        viewModel.applyScannedSourceImages(sources, in: sourceFolder)
+        viewModel.applyScannedDestinationImages(destinations, in: destinationFolder)
+        viewModel.clearSourceSelection()
+        viewModel.clearDestinationSelection()
+
+        viewModel.setAssignedDestinationPath(path(for: destinations[0]), for: sources[0])
+
+        XCTAssertTrue(viewModel.isSourceSelected(sources[0]))
+        XCTAssertTrue(viewModel.isDestinationSelected(destinations[0]))
+        XCTAssertEqual(viewModel.mappings.first?.source.filename, "new1.jpg")
+        XCTAssertEqual(viewModel.mappings.first?.destination.filename, "account.jpg")
+    }
+
     private func makeFiles(_ names: [String]) -> [ImageFile] {
         names.map { ImageFile(url: URL(fileURLWithPath: "/tmp/\($0)")) }
+    }
+
+    private func path(for file: ImageFile) -> String {
+        file.url.standardizedFileURL.path
     }
 }

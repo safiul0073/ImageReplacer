@@ -233,6 +233,21 @@ The **Choose Source Images** table provides the same filename filtering and sele
 
 Only selected source images are mapped. Source selections retain the configured source sort order, regardless of the order in which checkboxes were clicked.
 
+## Pairing One Source to One Destination
+
+For exact control, use the **Destination** dropdown in the **Choose Source Images** table.
+
+1. Scan the source and destination folders.
+2. Find the source image you want to control.
+3. Open that row's **Destination** dropdown.
+4. Choose the exact destination image it should replace.
+5. Repeat for any other specific pairs.
+6. Review **Mapping Preview** before replacing images.
+
+Choosing a destination from a source row automatically marks that source and destination as selected. If the same destination is later chosen for another source, the app moves the manual pair to the latest source so one destination is never assigned twice.
+
+Rows set to **Automatic** still use the existing ordered mapping behavior with the remaining selected destinations. This lets you manually pair only the special cases and let the app fill the rest.
+
 ## Sorting
 
 Source and destination sorting are configurable independently.
